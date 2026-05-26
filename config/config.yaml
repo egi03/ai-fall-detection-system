@@ -1,0 +1,136 @@
+# Fall Detection System Configuration
+# All configurable parameters centralized here.
+# Reference: research/8.1, research/8.2
+
+# Reproducibility
+seed: 42
+
+# Video source configuration
+video:
+  source: 0                      # 0 = webcam, or path to video file
+  target_fps: 15
+  resolution: [640, 480]
+
+# Person detection (YOLOv8)
+# Reference: research/2.1 - YOLOv8 nano is best speed/accuracy trade-off for CPU
+detection:
+  model: yolov8n                 # yolov8n, yolov8s, yolov8m
+  confidence_threshold: 0.5
+  iou_threshold: 0.45
+
+# Pose estimation (MediaPipe / YOLO-Pose / RTMPose)
+# Reference: research/3.1 - MediaPipe superior for CPU-bound, 33 keypoints, 3D
+# RTMPose: top-down ONNX estimator, 17 COCO keypoints, robust to lying poses
+pose:
+  backend: mediapipe             # mediapipe, yolo_pose, or rtmpose
+  model_complexity: 1            # MediaPipe only: 0=Lite, 1=Full, 2=Heavy
+  min_detection_confidence: 0.5
+  min_tracking_confidence: 0.5
+  smooth_landmarks: true
+  keypoint_confidence_threshold: 0.5  # Discard keypoints below this
+  rtmpose_mode: balanced         # RTMPose only: lightweight, balanced, performance
+  rtmpose_device: cpu            # RTMPose only: cpu or cuda
+  smoothing:
+    enabled: false               # Apply OneEuro filter to (x, y) of every keypoint
+    min_cutoff: 1.0              # Hz at zero velocity (lower = more idle smoothing)
+    beta: 0.007                  # Speed coefficient (higher = more responsive to motion)
+    d_cutoff: 1.0                # Cutoff for derivative low-pass (Hz)
+
+# Feature extraction
+# Reference: research/3.2, research/8.3
+features:
+  window_size: 30                # frames (2 seconds at 15 FPS)
+  window_stride: 5              # frames (for real-time sliding window)
+  normalize: true                # Person-centric normalization
+  normalization_method: person_centric  # person_centric or per_sequence
+  calibration:
+    enabled: false               # Per-camera soft-threshold of velocity/accel jitter
+    warmup_seconds: 3.0          # Collect baseline for this many seconds at startup
+    indices: [3, 4]              # Calibrated feature indices (3=com_vel, 4=com_accel)
+    k: 1.5                       # Suppression band width in baseline-std units
+    min_std: 0.0005              # Minimum baseline std clamp
+
+# LSTM model architecture (BiLSTM baseline)
+# Reference: research/4.1 - 128 hidden units optimal, 2 layers, dropout 0.3
+model:
+  hidden_size: 128
+  num_layers: 2
+  dropout: 0.5                   # increased from 0.3 to reduce overfitting
+  bidirectional: true            # enables BiLSTM for better temporal context
+  num_classes: 2                 # fall, non-fall
+
+# Transformer-LSTM hybrid architecture (novel contribution)
+# Reference: research/4.1 - Hybrid Transformer-LSTM recommended architecture
+# Combines global self-attention (identifies critical frames) with LSTM
+# sequential processing (captures causal fall dynamics).
+transformer_lstm:
+  d_model: 64                    # Transformer embedding dimension (research/4.1: 32-128)
+  nhead: 4                       # Attention heads (research/4.1: 4-8)
+  num_encoder_layers: 2          # Transformer encoder layers (research/4.1: 1-4)
+  dim_feedforward: 128           # Feedforward dimension in transformer
+  lstm_hidden_size: 128          # LSTM decoder hidden size
+  lstm_num_layers: 1             # LSTM decoder layers (1 per research/4.1)
+
+# Training hyperparameters
+# Reference: research/8.2
+training:
+  batch_size: 32
+  learning_rate: 0.001
+  weight_decay: 0.0001           # L2 regularization
+  epochs: 100
+  early_stopping_patience: 30   # increased from 15 — small val set needs more patience
+  class_weight_auto: true        # Automatically balance fall/non-fall
+  optimizer: adam
+  scheduler: reduce_on_plateau
+  scheduler_patience: 5
+  scheduler_factor: 0.5
+  positive_label_threshold: 0.5  # Ratio of fall frames to label window as fall
+  device: cpu                    # mps (M1 GPU), cuda, or cpu
+
+# Alarm system
+# Reference: research/9.2, research/5.2
+alarm:
+  confidence_threshold: 0.75
+  warning_threshold: 0.55        # Lower gate for IMMINENT pre-fall warning (yellow)
+  persistence_frames: 10         # Must be active for N frames to trigger alarm
+  cooldown_seconds: 30
+  stillness_duration_seconds: 5.0  # Post-fall stillness to confirm
+  ema_alpha: 0.3                 # Exponential moving average smoothing factor
+  # Post-fall severity refinement (only used by the live demo)
+  severity:
+    enabled: true                # Refine logged severity from CRITICAL → SEVERE/MODERATE/MINOR
+    motion_threshold: 0.003      # Frame-to-frame keypoint displacement floor (normalized coords)
+    history_frames: 15           # Rolling window for motion score
+    severe_seconds: 5.0          # Continuous stillness duration that promotes to SEVERE
+    minor_seconds: 1.5           # Recovery within this duration ⇒ MINOR
+    assessment_timeout_seconds: 10.0  # Finalize severity after this long, even without recovery
+
+# Evaluation
+# Reference: research/5.1
+evaluation:
+  loso: true                     # Leave-One-Subject-Out cross-validation
+  metrics:
+    - sensitivity
+    - specificity
+    - accuracy
+    - f1
+    - auc_roc
+    - pr_auc
+    - false_alarm_rate
+
+# Paths (all relative to project root)
+paths:
+  data_raw: data/data/raw/
+  data_processed: data/data/processed/
+  data_splits: data/data/splits/
+  models: models/
+  logs: logs/
+  results: results/
+
+# Logging
+logging:
+  level: INFO
+  format: json                   # json or text
+  log_file: logs/app.log
+  max_bytes: 10485760            # 10 MB
+  backup_count: 5

@@ -1,0 +1,153 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <title>Fall Detection Web Demo</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <link rel="stylesheet" href="/static/style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js" defer></script>
+  <script src="/static/app.js" defer></script>
+  <script src="/static/live.js" defer></script>
+</head>
+<body>
+  <header>
+    <h1>Fall Detection</h1>
+    <p class="sub">
+      Built completely by Eugen Sedlar using <a href="https://ai.google.dev/gemini" target="_blank" rel="noopener">Gemini 3 Flash</a> for narration and a custom ensemble of pose + BiLSTM models for fall detection. Try uploading a clip or testing live with your webcam! (No data is stored.)
+    </p>
+  </header>
+
+  <nav class="tabs" role="tablist">
+    <button type="button" class="tab active" data-tab="upload" role="tab" aria-selected="true">Upload a clip</button>
+    <button type="button" class="tab" data-tab="live" role="tab" aria-selected="false">Live from webcam</button>
+  </nav>
+
+  <main>
+    <div id="upload-view" class="tab-view">
+    <section class="card" id="upload-card">
+      <h2>Upload a video</h2>
+      <form id="upload-form">
+        <label class="file-drop">
+          <input type="file" name="video" id="video-input" accept="video/*" required />
+          <span>Click or drop a clip (.mp4, .mov, .avi, .mkv, .webm — up to 200 MB)</span>
+        </label>
+
+        <div class="options">
+          <label>
+            <input type="checkbox" name="use_vlm" id="use-vlm" value="1" />
+            Add Gemini narration on first confirmed fall
+            <small>(needs <code>GOOGLE_API_KEY</code> in <code>.env</code>)</small>
+          </label>
+        </div>
+
+        <button type="submit" id="run-btn">Run analysis</button>
+      </form>
+
+      <div id="progress" class="hidden">
+        <div class="spinner"></div>
+        <p id="progress-text">Processing…</p>
+      </div>
+
+      <p id="error" class="error hidden"></p>
+    </section>
+
+    <section id="results" class="hidden">
+      <div class="card">
+        <h2>Annotated video</h2>
+        <video id="annotated-video" controls preload="metadata"></video>
+      </div>
+
+      <div class="grid">
+        <div class="card">
+          <h2>Summary</h2>
+          <ul id="summary-list" class="kv"></ul>
+        </div>
+        <div class="card narration-card">
+          <h2>Gemini narration</h2>
+          <p id="narration" class="narration">—</p>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>P(fall) over time</h2>
+        <canvas id="prob-chart" height="120"></canvas>
+      </div>
+
+      <div class="card">
+        <h2>Alarm timeline</h2>
+        <table id="events-table">
+          <thead>
+            <tr><th>#</th><th>Frame</th><th>Time (s)</th><th>Peak P(fall)</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+        <p id="no-events" class="hidden muted">No falls were confirmed in this clip.</p>
+      </div>
+
+      <div class="card">
+        <h2>Downloads</h2>
+        <ul id="download-list"></ul>
+      </div>
+    </section>
+    </div>
+
+    <div id="live-view" class="tab-view hidden">
+      <section class="card">
+        <h2>Live webcam fall detection</h2>
+        <p class="muted small">
+          Streams your camera frames to the server, which runs pose + BiLSTM ensemble + alarm FSM and sends keypoints back for the overlay. Nothing is recorded.
+        </p>
+        <div class="live-controls">
+          <button type="button" id="live-start" class="primary-btn">Start camera</button>
+          <button type="button" id="live-stop" class="secondary-btn hidden">Stop</button>
+          <span id="live-status" class="muted small">Idle.</span>
+        </div>
+        <p id="live-error" class="error hidden"></p>
+      </section>
+
+      <section class="card live-stage hidden" id="live-stage">
+        <div class="stage-wrap">
+          <video id="live-video" autoplay playsinline muted></video>
+          <canvas id="live-overlay"></canvas>
+          <div id="live-badge" class="state-badge state-normal">NORMAL</div>
+          <div id="live-fps" class="live-fps">— fps</div>
+        </div>
+      </section>
+
+      <div class="grid live-grid hidden" id="live-results">
+        <div class="card">
+          <h2>Live stats</h2>
+          <ul id="live-summary" class="kv">
+            <li><span class="k">State</span><span class="v" id="ls-state">NORMAL</span></li>
+            <li><span class="k">P(fall)</span><span class="v" id="ls-prob">0.000</span></li>
+            <li><span class="k">Window</span><span class="v" id="ls-window">0 / 30</span></li>
+            <li><span class="k">Falls detected</span><span class="v" id="ls-falls">0</span></li>
+            <li><span class="k">Send rate</span><span class="v" id="ls-send">— fps</span></li>
+            <li><span class="k">Server latency</span><span class="v" id="ls-latency">— ms</span></li>
+            <li><span class="k">Alarm threshold</span><span class="v" id="ls-threshold">—</span></li>
+            <li><span class="k">Models</span><span class="v small" id="ls-models">—</span></li>
+          </ul>
+        </div>
+        <div class="card">
+          <h2>Live P(fall) — last 30 s</h2>
+          <canvas id="live-chart" height="160"></canvas>
+        </div>
+      </div>
+
+      <section class="card hidden" id="live-events-card">
+        <h2>Alarm timeline</h2>
+        <table id="live-events-table">
+          <thead>
+            <tr><th>#</th><th>Frame</th><th>Time (s)</th><th>Peak P(fall)</th></tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+    </div>
+  </main>
+
+  <footer>
+    <small>Fall Detection · ensemble inference is CPU-only · processing runs synchronously, ~12 FPS.</small>
+  </footer>
+</body>
+</html>

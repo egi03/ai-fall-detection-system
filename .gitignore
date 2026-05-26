@@ -1,0 +1,69 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.egg-info/
+*.egg
+dist/
+build/
+
+# Virtual environment
+venv/
+.venv/
+env/
+
+# Data (raw + processed, large files)
+/data/
+
+# Model weights (large binary files) — scoped to repo root so tracked
+# source code under src/models/ keeps working.
+/models/
+# Whitelist demo model assets (committed via Git LFS) so the demo runs out-of-the-box.
+!/models/run5_stride2_aug/
+!/models/run5_stride2_aug/**
+!/models/pose_landmarker_lite.task
+
+# Training logs
+/logs/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# Pytest
+.pytest_cache/
+
+# LaTeX build artifacts
+paper/*.aux
+paper/*.log
+paper/*.out
+paper/*.pdf
+
+# Environment / secrets
+.env
+*.env
+
+# Jupyter
+.ipynb_checkpoints/
+
+# numpy binary files
+*.npy
+!/models/run5_stride2_aug/**/*.npy
+
+# Experiment results (generated outputs)
+results/
+
+# Video files
+video.avi
+*.avi
+
+# Zip archives
+*.zip
+
